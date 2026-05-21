@@ -1,5 +1,13 @@
 # ignore all root items
 /*
+utils/
+data_files/canoe_df/
+data_files/canoe_df_subsets/
+data_files/CANOE_STEEL/
+data_files/houseflow_dfs
+data_files/my_configs/houseflow_configs/
+output_files/
+
 
 # unignore folders
 !temoa/
