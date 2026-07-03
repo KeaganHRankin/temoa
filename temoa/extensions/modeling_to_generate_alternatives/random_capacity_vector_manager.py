@@ -75,6 +75,7 @@ class RandomCapacityVectorManager(VectorManager):
         weighting: MgaWeighting,
         optimal_cost: float,
         cost_relaxation: float,
+        seed: int | None = 2025,
     ):
         self.completed_solves = 0
         self.conn = conn
@@ -82,6 +83,10 @@ class RandomCapacityVectorManager(VectorManager):
         self.optimal_cost = optimal_cost
         self.cost_relaxation = cost_relaxation
         self.generation_index = 1  # index of how many models generated to couple inputs-outputs
+
+        # Set seed for reproducibility
+        np.random.seed(seed)
+        logger.info(f'numpy random seed: {seed}')
 
         # {category : [technology, ...]}
         # the number of keys in this are the dimension of the hull
@@ -100,14 +105,16 @@ class RandomCapacityVectorManager(VectorManager):
 
         if weighting != MgaWeighting.HULL_EXPANSION:
             raise NotImplementedError(
-                'Tech Activity currently only works with Hull Expansion weighting'
+                'Random Capacity currently only works with Hull Expansion weighting'
             )
         self.hull_points: np.ndarray | None = None
         self.hull: Hull | None = None
 
         # include minimise/maximise basis (sum of category) runs?
-        self.include_min = True # -> These runs can be very unstable due to degenerate solutions
-        self.include_max = True # -> These runs can also be a bit unstable due to flat solution spaces
+        # Default: false due to instability
+        self.include_min = False # -> These runs can be very unstable due to degenerate solutions
+        self.include_max = False # -> These runs can also be a bit unstable due to flat solution spaces
+        if self.include_min or self.include_max: logger.info('Including min/max basis coefficient vectors.')
 
         # Should we save the random vector objectives each run and reuse them?
         # allows repeatable MGA vectors if categories dont change
@@ -137,6 +144,7 @@ class RandomCapacityVectorManager(VectorManager):
         for row in raw:
             cat, tech = row
             if cat in {None, ''}:
+                # Ignore uncategorised (None or blank) technologies
                 #cat = default_cat # devnote: Why? This would clump every uncategorised tech into one giant category for MGA
                 continue
             if tech in techs_implemented:
@@ -149,6 +157,10 @@ class RandomCapacityVectorManager(VectorManager):
             raise RuntimeError(msg)
         else:
             print(f"Categories and number of technologies per category: {[(c, len(t)) for c, t in self.category_mapping.items()]}")
+
+        if len(self.category_mapping) > 6:
+            logger.info('More than 6 technology categories detected. Setting hull_monitor to False.')
+            self.hull_monitor = False
 
         for cat in self.category_mapping:
             logger.debug('Category %s members: %d', cat, len(self.category_mapping[cat]))
@@ -205,7 +217,7 @@ class RandomCapacityVectorManager(VectorManager):
         # --------------------------------------------------------------------------------------------------
         else:
             coeffs = self.random_coefficients(len(var_vec)) # If we aren't saving and reusing the random vectors
-
+            
         coeffs /= sum(abs(coeffs))
         obj_expr = quicksum(c * e for c, e in zip(coeffs, cost_vec))
         new_model.obj = Objective(expr=obj_expr)
@@ -400,20 +412,21 @@ class RandomCapacityVectorManager(VectorManager):
                             'Failed to retrieve a named variable from the model: %s', var_name
                         )
                     for idx in self.variable_index_mapping[tech][var_name]:
-                        vars.append(var[idx])
-                        costs.append(
-                            loan_cost(
-                                M.V_NewCapacity[idx],
-                                M.CostInvest[idx],
-                                M.LoanAnnualize[idx],
-                                value(M.LoanLifetimeProcess[idx]),
-                                value(M.LifetimeProcess[idx]),
-                                P_0,
-                                P_e,
-                                GDR,
-                                vintage=idx[2],
-                            )
-                        )
+                        # Iterating over indices that exist in CostInvest and time_optimize
+                        if idx in M.CostInvest.sparse_iterkeys() and idx[2] in M.time_optimize:
+                            vars.append(var[idx])
+                            costs.append(
+                                loan_cost(
+                                    M.V_NewCapacity[idx],
+                                    M.CostInvest[idx],
+                                    M.LoanAnnualize[idx],
+                                    value(M.LoanLifetimeProcess[idx]),
+                                    value(M.LifetimeProcess[idx]),
+                                    P_0,
+                                    P_e,
+                                    GDR,
+                                    vintage=idx[2],
+                                ))
         return vars, costs
 
     def regenerate_hull(self):
