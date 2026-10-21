@@ -20,6 +20,16 @@ TimeLimit = 18000  # 5 hrs
 # 'LogFile': './my_gurobi_log.log',
 # 'LPWarmStart': 2,  # pass basis
 
+[gurobi_base]
+# options for the single base (optimal-cost) solve that sets the MGA cost cap.
+# tighter than worker options so the cap is anchored to a precise optimum.
+Method = 2             # barrier
+Threads = 12
+Crossover = 0          # disabled
+BarConvTol = 1e-8      # Gurobi default
+FeasibilityTol = 1e-6  # Gurobi default
+TimeLimit = 3600
+
 [cbc]
 # tbd
 

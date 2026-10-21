@@ -96,16 +96,21 @@ class MgaSequencer:
             with open(solver_options_path, 'rb') as f:
                 all_options = tomllib.load(f)
             s_options = all_options.get(self.config.solver_name, {})
+            # tighter options for the base solve, if provided; else fall back to worker options
+            base_options = all_options.get(f'{self.config.solver_name}_base', s_options)
             logger.info('Using solver options: %s', s_options)
+            logger.info('Using base solve options: %s', base_options)
 
         except FileNotFoundError:
             logger.warning('Unable to find solver options toml file.  Using default options.')
             s_options = {}
+            base_options = {}
             all_options = {}
 
         # get handle on solver instance
         self.opt = pyo.SolverFactory(self.config.solver_name)
         self.worker_solver_options = s_options
+        self.base_solver_options = base_options
 
         # some defaults, etc.
         self.internal_stop = False
@@ -178,8 +183,8 @@ class MgaSequencer:
         # 2. Base solve
         tic = datetime.now()
         #   ============ First Solve ============
-        #  Note:  We *exclude* the worker_solver_options here to get a more precise base cost
-        self.opt.options = self.worker_solver_options
+        #  Note:  We use the tighter base_solver_options here to get a more precise base cost
+        self.opt.options = self.base_solver_options
         res: Results = self.opt.solve(instance, tee=True)
         toc = datetime.now()
         elapsed = toc - tic
