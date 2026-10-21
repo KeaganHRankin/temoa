@@ -35,3 +35,6 @@ __pycache__
 
 # ignore built docs
 docs/_build
+
+# MGA random vector caches (run artifacts)
+temoa/extensions/modeling_to_generate_alternatives/mga_random_*_vectors.csv

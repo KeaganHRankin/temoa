@@ -40,7 +40,7 @@ import pandas as pd # for emergency data dumping
 from matplotlib import pyplot as plt
 from pyomo.core import Expression, Var, value, Objective, quicksum
 
-from definitions import get_OUTPUT_PATH
+from definitions import get_OUTPUT_PATH, PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
@@ -48,6 +48,12 @@ from temoa.temoa_model.temoa_model import TemoaModel
 from temoa.temoa_model.temoa_rules import loan_cost
 
 logger = getLogger(__name__)
+
+# absolute path to the random vector cache, anchored to the temoa project root
+# so it resolves correctly regardless of the working directory TEMOA is launched from.
+RANDOM_VECTOR_CACHE = Path(
+    PROJECT_ROOT, 'temoa/extensions/modeling_to_generate_alternatives/mga_random_capacity_vectors.csv'
+)
 
 
 class DefaultItem:
@@ -120,15 +126,16 @@ class RandomCapacityVectorManager(VectorManager):
         # allows repeatable MGA vectors if categories dont change
         self.reuse_random_vectors = True
 
+        # monitor/report the size of the hull for each new point.
+        # only works for very small number of categories, scales poorly
+        # (set before initialize() so it can disable this for > 6 categories)
+        self.hull_monitor = True
+        self.perf_data = {}
+
         self.initialize()
         self.basis_coefficients: Queue[np.ndarray] = self._generate_basis_coefficients(
             self.category_mapping, self.technology_size, self.include_min, self.include_max
         )
-
-        # monitor/report the size of the hull for each new point.
-        # only works for very small number of categories, scales poorly
-        self.hull_monitor = True
-        self.perf_data = {}
         
 
     def initialize(self) -> None:
@@ -195,7 +202,7 @@ class RandomCapacityVectorManager(VectorManager):
             if self.random_vector_table is None: self.random_vector_table = self.get_random_vectors_cache()
             
             df = self.random_vector_table
-            file = 'temoa/extensions/modeling_to_generate_alternatives/mga_random_vectors.csv'
+            file = RANDOM_VECTOR_CACHE
             if df is None:
                 print("Created random vector table.")
                 coeffs = self.random_coefficients(len(var_vec))
@@ -225,8 +232,8 @@ class RandomCapacityVectorManager(VectorManager):
         return new_model
     
     def get_random_vectors_cache(self) -> pd.DataFrame:
-        file = 'temoa/extensions/modeling_to_generate_alternatives/mga_random_vectors.csv'
-        if os.path.isfile(file):
+        file = RANDOM_VECTOR_CACHE
+        if file.is_file():
             print("Got random vector table from file.")
             return pd.read_csv(file, index_col=0)
         else:

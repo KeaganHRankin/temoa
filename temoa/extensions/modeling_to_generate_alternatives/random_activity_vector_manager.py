@@ -40,13 +40,19 @@ import pandas as pd # for emergency data dumping
 from matplotlib import pyplot as plt
 from pyomo.core import Expression, Var, value, Objective, quicksum
 
-from definitions import get_OUTPUT_PATH
+from definitions import get_OUTPUT_PATH, PROJECT_ROOT
 from temoa.extensions.modeling_to_generate_alternatives.hull import Hull
 from temoa.extensions.modeling_to_generate_alternatives.mga_constants import MgaWeighting
 from temoa.extensions.modeling_to_generate_alternatives.vector_manager import VectorManager
 from temoa.temoa_model.temoa_model import TemoaModel
 
 logger = getLogger(__name__)
+
+# absolute path to the random vector cache, anchored to the temoa project root
+# so it resolves correctly regardless of the working directory TEMOA is launched from.
+RANDOM_VECTOR_CACHE = Path(
+    PROJECT_ROOT, 'temoa/extensions/modeling_to_generate_alternatives/mga_random_activity_vectors.csv'
+)
 
 
 class DefaultItem:
@@ -170,7 +176,7 @@ class RandomActivityVectorManager(VectorManager):
             print("Created random vector table.")
             coeffs = np.random.random(len(var_vec)) - 0.5
             df = pd.DataFrame(index=[str(var) for var in var_vec], data=coeffs, columns=[new_model.name])
-            df.to_csv('mga_random_vectors.csv')
+            df.to_csv(RANDOM_VECTOR_CACHE)
             df.to_csv(Path(get_OUTPUT_PATH(), 'mga_random_vectors.csv'))
 
         if new_model.name in df.columns:
@@ -181,7 +187,7 @@ class RandomActivityVectorManager(VectorManager):
             coeffs = np.random.random(len(var_vec)) - 0.5
             df_2 = pd.DataFrame(index=[str(var) for var in var_vec], data=coeffs, columns=[new_model.name])
             df = pd.concat([df, df_2], axis='columns')
-            df.to_csv('mga_random_vectors.csv')
+            df.to_csv(RANDOM_VECTOR_CACHE)
             df.to_csv(Path(get_OUTPUT_PATH(), 'mga_random_vectors.csv'))
 
         self.random_vector_table = df
@@ -195,8 +201,8 @@ class RandomActivityVectorManager(VectorManager):
         return new_model
     
     def get_random_vectors_cache(self) -> pd.DataFrame:
-        file = 'mga_random_vectors.csv'
-        if os.path.isfile(file):
+        file = RANDOM_VECTOR_CACHE
+        if file.is_file():
             print("Got random vector table from file.")
             return pd.read_csv(file, index_col=0)
         else:
